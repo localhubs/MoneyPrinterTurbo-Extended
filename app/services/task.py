@@ -115,6 +115,20 @@ def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
         logger.info("\n\n## correcting subtitle")
         subtitle.correct(subtitle_file=subtitle_path, video_script=video_script)
 
+    # Generate enhanced subtitles if word highlighting is enabled
+    if getattr(params, 'enable_word_highlighting', False):
+        logger.info("\n\n## generating enhanced subtitles for word highlighting")
+        enhanced_subtitle_path = path.join(utils.task_dir(task_id), "subtitle_enhanced.json")
+        enhanced_subtitles = subtitle.create_enhanced_subtitles(
+            audio_file=audio_file, 
+            subtitle_file=enhanced_subtitle_path,
+            params=params
+        )
+        if enhanced_subtitles:
+            # Store both paths for later use
+            params._enhanced_subtitle_path = enhanced_subtitle_path
+            logger.info(f"enhanced subtitles created: {enhanced_subtitle_path}")
+
     subtitle_lines = subtitle.file_to_subtitles(subtitle_path)
     if not subtitle_lines:
         logger.warning(f"subtitle file is invalid: {subtitle_path}")

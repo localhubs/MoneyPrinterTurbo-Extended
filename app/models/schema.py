@@ -101,6 +101,13 @@ class VideoParams(BaseModel):
     font_size: int = 60
     stroke_color: Optional[str] = "#000000"
     stroke_width: float = 1.5
+    
+    # Word highlighting settings
+    enable_word_highlighting: Optional[bool] = False
+    word_highlight_color: Optional[str] = "#ff0000"
+    max_chars_per_line: Optional[int] = 40
+    max_lines_per_subtitle: Optional[int] = 2
+    
     n_threads: Optional[int] = 2
     paragraph_number: Optional[int] = 1
 
@@ -123,6 +130,12 @@ class SubtitleRequest(BaseModel):
     stroke_width: float = 1.5
     video_source: Optional[str] = "local"
     subtitle_enabled: Optional[str] = "true"
+    
+    # Word highlighting settings
+    enable_word_highlighting: Optional[bool] = False
+    word_highlight_color: Optional[str] = "#ff0000"
+    max_chars_per_line: Optional[int] = 40
+    max_lines_per_subtitle: Optional[int] = 2
 
 
 class AudioRequest(BaseModel):
@@ -165,6 +178,24 @@ class VideoTermsParams:
         "春天的花海，如诗如画般展现在眼前。万物复苏的季节里，大地披上了一袭绚丽多彩的盛装。金黄的迎春、粉嫩的樱花、洁白的梨花、艳丽的郁金香……"
     )
     amount: Optional[int] = 5
+
+
+class WordTiming(BaseModel):
+    """Word-level timing information for enhanced subtitles"""
+    word: str
+    start: float
+    end: float
+    line: int = 0  # Which line this word appears on (0-indexed)
+    position: int = 0  # Position within the line (0-indexed)
+
+
+class EnhancedSubtitle(BaseModel):
+    """Enhanced subtitle segment with word-level timing"""
+    start_time: float
+    end_time: float
+    text: str
+    words: List[WordTiming]
+    lines: List[str]  # Text split into lines for rendering
 
 
 class BaseResponse(BaseModel):

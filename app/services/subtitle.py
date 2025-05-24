@@ -297,3 +297,195 @@ if __name__ == "__main__":
 
     subtitle_file = f"{task_dir}/subtitle-test.srt"
     create(audio_file, subtitle_file)
+
+
+def create_enhanced_subtitles(audio_file, subtitle_file: str = "", params=None):
+    """
+    Create enhanced subtitles with word-level timing for word highlighting
+    """
+    from app.models.schema import WordTiming, EnhancedSubtitle
+    
+    global model
+    if not model:
+        model_path = f"{utils.root_dir()}/models/whisper-{model_size}"
+        model_bin_file = f"{model_path}/model.bin"
+        if not os.path.isdir(model_path) or not os.path.isfile(model_bin_file):
+            model_path = model_size
+
+        logger.info(
+            f"loading model: {model_path}, device: {device}, compute_type: {compute_type}"
+        )
+        try:
+            model = WhisperModel(
+                model_size_or_path=model_path, device=device, compute_type=compute_type
+            )
+        except Exception as e:
+            logger.error(
+                f"failed to load model: {e} \n\n"
+                f"********************************************\n"
+                f"this may be caused by network issue. \n"
+                f"please download the model manually and put it in the 'models' folder. \n"
+                f"see [README.md FAQ](https://github.com/harry0703/MoneyPrinterTurbo) for more details.\n"
+                f"********************************************\n\n"
+            )
+            return None
+
+    logger.info(f"start enhanced subtitle generation, output file: {subtitle_file}")
+    if not subtitle_file:
+        subtitle_file = f"{audio_file}.enhanced.json"
+
+    # Generate word-level transcription
+    segments, info = model.transcribe(
+        audio_file,
+        beam_size=5,
+        word_timestamps=True,
+        vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=500),
+    )
+
+    logger.info(
+        f"detected language: '{info.language}', probability: {info.language_probability:.2f}"
+    )
+
+    enhanced_subtitles = []
+    current_subtitle = None
+    current_words = []
+    
+    max_chars_per_line = getattr(params, 'max_chars_per_line', 40)
+    max_lines_per_subtitle = getattr(params, 'max_lines_per_subtitle', 2)
+    
+    for segment in segments:
+        if not segment.words:
+            continue
+            
+        for word in segment.words:
+            word_text = word.word.strip()
+            if not word_text:
+                continue
+                
+            # Create word timing
+            word_timing = WordTiming(
+                word=word_text,
+                start=word.start,
+                end=word.end,
+                line=0,  # Will be calculated later
+                position=0  # Will be calculated later
+            )
+            
+            # Start new subtitle if needed
+            if current_subtitle is None:
+                current_subtitle = {
+                    'start_time': word.start,
+                    'end_time': word.end,
+                    'text': '',
+                    'words': []
+                }
+            
+            # Add word to current subtitle
+            current_words.append(word_timing)
+            current_subtitle['words'] = current_words
+            current_subtitle['text'] += word_text + ' '
+            current_subtitle['end_time'] = word.end
+            
+            # Check if we should break at punctuation or max length
+            should_break = (
+                utils.str_contains_punctuation(word_text) or
+                len(current_subtitle['text']) > max_chars_per_line * max_lines_per_subtitle
+            )
+            
+            if should_break:
+                # Process the current subtitle
+                enhanced_subtitle = _process_enhanced_subtitle(
+                    current_subtitle, max_chars_per_line, max_lines_per_subtitle
+                )
+                enhanced_subtitles.append(enhanced_subtitle)
+                
+                # Reset for next subtitle
+                current_subtitle = None
+                current_words = []
+    
+    # Process remaining subtitle
+    if current_subtitle and current_words:
+        enhanced_subtitle = _process_enhanced_subtitle(
+            current_subtitle, max_chars_per_line, max_lines_per_subtitle
+        )
+        enhanced_subtitles.append(enhanced_subtitle)
+    
+    # Save enhanced subtitles as JSON
+    enhanced_data = [subtitle.dict() for subtitle in enhanced_subtitles]
+    with open(subtitle_file, "w", encoding="utf-8") as f:
+        json.dump(enhanced_data, f, ensure_ascii=False, indent=2)
+    
+    logger.info(f"enhanced subtitle file created: {subtitle_file}")
+    return enhanced_subtitles
+
+
+def _process_enhanced_subtitle(subtitle_data, max_chars_per_line, max_lines_per_subtitle):
+    """
+    Process a subtitle segment to split text into lines and calculate word positions
+    """
+    from app.models.schema import WordTiming, EnhancedSubtitle
+    
+    text = subtitle_data['text'].strip()
+    words = subtitle_data['words']
+    
+    # Split text into lines
+    lines = _wrap_text_into_lines(text, max_chars_per_line, max_lines_per_subtitle)
+    
+    # Calculate line and position for each word
+    word_index = 0
+    for line_idx, line in enumerate(lines):
+        line_words = line.strip().split()
+        position = 0
+        
+        for line_word in line_words:
+            # Find matching word in our timing data
+            while word_index < len(words):
+                word_timing = words[word_index]
+                if word_timing.word.replace('.', '').replace(',', '').replace('!', '').replace('?', '') == line_word.replace('.', '').replace(',', '').replace('!', '').replace('?', ''):
+                    word_timing.line = line_idx
+                    word_timing.position = position
+                    position += 1
+                    word_index += 1
+                    break
+                word_index += 1
+    
+    return EnhancedSubtitle(
+        start_time=subtitle_data['start_time'],
+        end_time=subtitle_data['end_time'],
+        text=text,
+        words=words,
+        lines=lines
+    )
+
+
+def _wrap_text_into_lines(text, max_chars_per_line, max_lines):
+    """
+    Wrap text into lines respecting word boundaries
+    """
+    words = text.split()
+    lines = []
+    current_line = ""
+    
+    for word in words:
+        test_line = current_line + (" " if current_line else "") + word
+        
+        if len(test_line) <= max_chars_per_line:
+            current_line = test_line
+        else:
+            if current_line:
+                lines.append(current_line)
+                current_line = word
+            else:
+                # Word is too long for a line
+                lines.append(word)
+                current_line = ""
+            
+            # Check max lines limit
+            if len(lines) >= max_lines:
+                break
+    
+    if current_line and len(lines) < max_lines:
+        lines.append(current_line)
+    
+    return lines

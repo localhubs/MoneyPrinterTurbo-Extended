@@ -4,8 +4,10 @@ import os
 import random
 import gc
 import shutil
+import json
 from typing import List
 from loguru import logger
+import numpy as np
 from moviepy import (
     AudioFileClip,
     ColorClip,
@@ -18,7 +20,7 @@ from moviepy import (
     concatenate_videoclips,
 )
 from moviepy.video.tools.subtitles import SubtitlesClip
-from PIL import ImageFont
+from PIL import ImageFont, ImageDraw, Image
 
 from app.models import const
 from app.models.schema import (
@@ -360,6 +362,171 @@ def wrap_text(text, max_width, font="Arial", fontsize=60):
     return result, height
 
 
+def create_enhanced_subtitle_clips(enhanced_subtitle_path, params, video_width, video_height, font_path):
+    """
+    Create text clips with true word-by-word highlighting
+    Creates subtitle images where only the currently spoken word is highlighted
+    """
+    text_clips = []
+    
+    # Load enhanced subtitle data
+    with open(enhanced_subtitle_path, 'r', encoding='utf-8') as f:
+        enhanced_data = json.load(f)
+    
+    def hex_to_rgb(hex_color):
+        """Convert hex color to RGB tuple"""
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    
+    def position_clip(clip, params, video_height):
+        """Apply positioning to a clip based on subtitle position settings"""
+        if params.subtitle_position == "bottom":
+            return clip.with_position(("center", video_height * 0.85))
+        elif params.subtitle_position == "top":
+            return clip.with_position(("center", video_height * 0.05))
+        elif params.subtitle_position == "custom":
+            custom_y = (video_height * params.custom_position / 100)
+            return clip.with_position(("center", custom_y))
+        else:  # center
+            return clip.with_position(("center", "center"))
+    
+    def create_word_highlighted_image(text, highlighted_word_indices, font_size, normal_color, highlight_color, stroke_color, stroke_width):
+        """Create an image with specific words highlighted"""
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except:
+            font = ImageFont.load_default()
+        
+        # Wrap text using the same logic
+        max_width = int(video_width * 0.9)
+        wrapped_txt, _ = wrap_text(
+            text, max_width=max_width, font=font_path, fontsize=font_size
+        )
+        
+        # Split into lines and words
+        lines = wrapped_txt.split('\n')
+        
+        # Calculate image dimensions
+        line_height = int(font_size * 1.3)
+        img_height = len(lines) * line_height + 40  # Add padding
+        img_width = max_width + 40  # Add padding
+        
+        # Create transparent image
+        img = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Colors
+        normal_rgb = hex_to_rgb(normal_color)
+        highlight_rgb = hex_to_rgb(highlight_color)
+        stroke_rgb = hex_to_rgb(stroke_color) if stroke_color else None
+        
+        word_index = 0
+        y_pos = 20  # Start padding
+        
+        for line in lines:
+            words = line.split()
+            x_pos = 20  # Start padding
+            
+            for word in words:
+                # Determine color for this word
+                word_color = highlight_rgb if word_index in highlighted_word_indices else normal_rgb
+                
+                # Draw word with stroke if specified
+                if stroke_rgb and stroke_width > 0:
+                    # Draw stroke by drawing text multiple times with offset
+                    stroke_w = int(stroke_width)
+                    for dx in range(-stroke_w, stroke_w + 1):
+                        for dy in range(-stroke_w, stroke_w + 1):
+                            if dx != 0 or dy != 0:
+                                draw.text((x_pos + dx, y_pos + dy), word, font=font, fill=stroke_rgb)
+                
+                # Draw main text
+                draw.text((x_pos, y_pos), word, font=font, fill=word_color)
+                
+                # Calculate next position
+                word_bbox = font.getbbox(word + ' ')
+                x_pos += word_bbox[2] - word_bbox[0]
+                word_index += 1
+            
+            y_pos += line_height
+        
+        return img
+    
+    def create_subtitle_clip(text, highlighted_word_indices, start_time, duration, params):
+        """Create a subtitle clip with specified highlighting"""
+        try:
+            img = create_word_highlighted_image(
+                text=text,
+                highlighted_word_indices=highlighted_word_indices,
+                font_size=int(params.font_size),
+                normal_color=params.text_fore_color,
+                highlight_color=params.word_highlight_color,
+                stroke_color=params.stroke_color,
+                stroke_width=int(params.stroke_width)
+            )
+            
+            clip = ImageClip(np.array(img)).with_duration(duration).with_start(start_time)
+            return position_clip(clip, params, video_height)
+            
+        except Exception as e:
+            logger.error(f"Failed to create subtitle clip: {str(e)}")
+            return None
+    
+    for subtitle_data in enhanced_data:
+        start_time = subtitle_data['start_time']
+        end_time = subtitle_data['end_time']
+        text = subtitle_data['text']
+        words = subtitle_data['words']
+        
+        # Sort words by start time
+        sorted_words = sorted(words, key=lambda w: w['start'])
+        
+        # Create word mapping to indices
+        text_words = []
+        for line in text.split('\n'):
+            text_words.extend(line.split())
+        
+        # Create time segments with word highlighting
+        current_time = start_time
+        
+        for word_data in sorted_words:
+            word_start = max(word_data['start'], start_time)
+            word_end = min(word_data['end'], end_time)
+            word_text = word_data['word'].strip()
+            
+            if word_start >= word_end:
+                continue
+            
+            # Find word index in text
+            word_index = -1
+            for idx, text_word in enumerate(text_words):
+                if text_word.strip().lower() == word_text.lower():
+                    word_index = idx
+                    break
+            
+            # Create segment before word (normal colors)
+            if word_start > current_time:
+                clip = create_subtitle_clip(text, set(), current_time, word_start - current_time, params)
+                if clip:
+                    text_clips.append(clip)
+            
+            # Create highlighted segment during word
+            if word_index >= 0:
+                clip = create_subtitle_clip(text, {word_index}, word_start, word_end - word_start, params)
+                if clip:
+                    text_clips.append(clip)
+            
+            current_time = word_end
+        
+        # Create final normal segment if needed
+        if current_time < end_time:
+            clip = create_subtitle_clip(text, set(), current_time, end_time - current_time, params)
+            if clip:
+                text_clips.append(clip)
+    
+    return text_clips
+
+
 def generate_video(
     video_path: str,
     audio_path: str,
@@ -448,13 +615,29 @@ def generate_video(
         )
 
     if subtitle_path and os.path.exists(subtitle_path):
-        sub = SubtitlesClip(
-            subtitles=subtitle_path, encoding="utf-8", make_textclip=make_textclip
+        # Check if word highlighting is enabled and enhanced subtitles are available
+        enhanced_subtitle_path = getattr(params, '_enhanced_subtitle_path', None)
+        use_word_highlighting = (
+            getattr(params, 'enable_word_highlighting', False) and
+            enhanced_subtitle_path and
+            os.path.exists(enhanced_subtitle_path)
         )
-        text_clips = []
-        for item in sub.subtitles:
-            clip = create_text_clip(subtitle_item=item)
-            text_clips.append(clip)
+        
+        if use_word_highlighting:
+            logger.info("Using enhanced subtitles with word highlighting")
+            text_clips = create_enhanced_subtitle_clips(
+                enhanced_subtitle_path, params, video_width, video_height, font_path
+            )
+        else:
+            # Traditional subtitle rendering
+            sub = SubtitlesClip(
+                subtitles=subtitle_path, encoding="utf-8", make_textclip=make_textclip
+            )
+            text_clips = []
+            for item in sub.subtitles:
+                clip = create_text_clip(subtitle_item=item)
+                text_clips.append(clip)
+        
         video_clip = CompositeVideoClip([video_clip, *text_clips])
 
     bgm_file = get_bgm_file(bgm_type=params.bgm_type, bgm_file=params.bgm_file)

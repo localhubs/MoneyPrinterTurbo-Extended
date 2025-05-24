@@ -907,6 +907,42 @@ with right_panel:
         with stroke_cols[1]:
             params.stroke_width = st.slider(tr("Stroke Width"), 0.0, 10.0, 1.5)
 
+        # Word highlighting settings
+        st.write("**Word Highlighting**")
+        saved_enable_word_highlighting = config.ui.get("enable_word_highlighting", False)
+        params.enable_word_highlighting = st.checkbox(
+            tr("Enable Word Highlighting (If unchecked, the settings below will not take effect)"), 
+            value=saved_enable_word_highlighting
+        )
+        config.ui["enable_word_highlighting"] = params.enable_word_highlighting
+        
+        if params.enable_word_highlighting:
+            highlight_cols = st.columns([0.3, 0.7])
+            with highlight_cols[0]:
+                saved_highlight_color = config.ui.get("highlight_color", "#ff0000")
+                params.word_highlight_color = st.color_picker(
+                    tr("Highlight Color"), saved_highlight_color
+                )
+                config.ui["highlight_color"] = params.word_highlight_color
+            
+            with highlight_cols[1]:
+                saved_max_chars_per_line = config.ui.get("max_chars_per_line", 40)
+                params.max_chars_per_line = st.slider(
+                    tr("Max Characters Per Line"), 20, 80, saved_max_chars_per_line
+                )
+                config.ui["max_chars_per_line"] = params.max_chars_per_line
+            
+            saved_max_lines_per_subtitle = config.ui.get("max_lines_per_subtitle", 2)
+            params.max_lines_per_subtitle = st.slider(
+                tr("Max Lines Per Subtitle"), 1, 4, saved_max_lines_per_subtitle
+            )
+            config.ui["max_lines_per_subtitle"] = params.max_lines_per_subtitle
+        else:
+            # Set default values when word highlighting is disabled
+            params.word_highlight_color = config.ui.get("highlight_color", "#ff0000")
+            params.max_chars_per_line = config.ui.get("max_chars_per_line", 40)
+            params.max_lines_per_subtitle = config.ui.get("max_lines_per_subtitle", 2)
+
 start_button = st.button(tr("Generate Video"), use_container_width=True, type="primary")
 if start_button:
     config.save_config()

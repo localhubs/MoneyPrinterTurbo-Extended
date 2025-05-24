@@ -100,6 +100,10 @@
     "Hide Log": "Hide Log",
     "Hide Basic Settings": "Hide Basic Settings\n\nHidden, the basic settings panel will not be displayed on the page.\n\nIf you need to display it again, please set `hide_config = false` in `config.toml`",
     "LLM Settings": "**LLM Settings**",
-    "Video Source Settings": "**Video Source Settings**"
+    "Video Source Settings": "**Video Source Settings**",
+    "Enable Word Highlighting (If unchecked, the settings below will not take effect)": "Enable Word Highlighting (If unchecked, the settings below will not take effect)",
+    "Highlight Color": "Word Highlight Color",
+    "Max Characters Per Line": "Maximum Characters Per Line",
+    "Max Lines Per Subtitle": "Maximum Lines Per Subtitle"
   }
 }
