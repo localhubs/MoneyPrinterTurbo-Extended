@@ -1,5 +1,5 @@
 <div align="center">
-<h1 align="center">MoneyPrinterTurbo 💸</h1>
+<h1 align="center">MoneyPrinterTurbo 💸 - Enhanced Fork</h1>
 
 <p align="center">
   <a href="https://github.com/harry0703/MoneyPrinterTurbo/stargazers"><img src="https://img.shields.io/github/stars/harry0703/MoneyPrinterTurbo.svg?style=for-the-badge" alt="Stargazers"></a>
@@ -8,6 +8,47 @@
   <a href="https://github.com/harry0703/MoneyPrinterTurbo/blob/main/LICENSE"><img src="https://img.shields.io/github/license/harry0703/MoneyPrinterTurbo.svg?style=for-the-badge" alt="License"></a>
 </p>
 <br>
+
+## 🙏 Original Repo Credit
+
+This is an **enhanced fork** of the amazing [MoneyPrinterTurbo](https://github.com/harry0703/MoneyPrinterTurbo) project check out oriignal repo and 
+**Full credit goes to the original author and contributors** .This fork adds advanced subtitle highlighting features while maintaining all the original functionality.
+
+---
+
+## ✨ New Features in This Fork
+
+### 🎯 **Word-by-Word Subtitle Highlighting** *(NEW!)*
+
+This enhanced version introduces **intelligent word-level highlighting** in subtitles, making videos more engaging and easier to follow:
+
+- **🔴 Real-time Word Highlighting**: Each word turns red exactly when it's being spoken
+- **🟡 Normal Text Color**: Non-spoken words remain in the original subtitle color (yellow)  
+- **⚡ Microsoft TTS2 Integration**: Perfect synchronization with Microsoft's Text-to-Speech timing
+- **🎨 Customizable Colors**: Configure highlight colors through the web interface
+- **📱 Multi-line Support**: Works seamlessly with wrapped text and multiple subtitle lines
+
+### 🚀 **Enhanced Video-Text Alignment** *(Coming Soon)*
+
+#### **Current Implementation:**
+- **📝 Text-based Similarity**: Current semantic search analyzes script content to match relevant video clips
+- **🎯 Better than Sequential**: No manual effort required (unlike sequential mode)
+- **🎯 Better than Random**: Much more relevant than random video selection
+
+#### **Future Roadmap:**
+- **🎥 Video Content Analysis**: AI-powered analysis of actual video content for semantic matching
+- **🧠 WhisperX Integration**: Enhanced subtitle timing with WhisperX for even more precise word highlighting
+- **🔍 Advanced Semantic Search**: Deep learning models to understand video content and match with spoken words
+- **📊 Similarity Scoring**: Intelligent ranking of video clips based on relevance to speech content
+
+### 🎛️ **Enhanced Web Interface**
+
+- **Word Highlighting Settings Panel**: Easy configuration of highlighting colors and behavior
+- **Real-time Preview**: See highlighting settings in action before generating videos
+- **Backward Compatible**: All existing features work exactly as before
+
+---
+
 <h3>简体中文 | <a href="README-en.md">English</a></h3>
 <div align="center">
   <a href="https://trendshift.io/repositories/8731" target="_blank"><img src="https://trendshift.io/api/badge/repositories/8731" alt="harry0703%2FMoneyPrinterTurbo | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
@@ -16,7 +57,7 @@
 只需提供一个视频 <b>主题</b> 或 <b>关键词</b> ，就可以全自动生成视频文案、视频素材、视频字幕、视频背景音乐，然后合成一个高清的短视频。
 <br>
 
-<h4>Web界面</h4>
+<h4>Web界面 - Enhanced with Word Highlighting Controls</h4>
 
 ![](docs/webui.jpg)
 
@@ -56,6 +97,14 @@
 - [x] 支持 **中文** 和 **英文** 视频文案
 - [x] 支持 **多种语音** 合成，可 **实时试听** 效果
 - [x] 支持 **字幕生成**，可以调整 `字体`、`位置`、`颜色`、`大小`，同时支持`字幕描边`设置
+- [x] **🔥 NEW: 逐词高亮字幕** - 支持`实时单词高亮`，当单词被朗读时自动变色，提升观看体验
+    - [x] **Microsoft TTS2 集成** - 完美同步语音与字幕高亮时间
+    - [x] **自定义高亮颜色** - 可在Web界面自由配置高亮颜色
+    - [x] **多行文本支持** - 支持换行文本的精确单词定位
+    - [x] **向后兼容** - 可选功能，不影响现有字幕模式
+- [x] **🚀 智能视频匹配** - 基于文本语义的视频片段智能选择
+    - [x] **语义相关性分析** - 比随机选择更精准，比顺序选择更智能
+    - [x] **未来支持视频内容分析** - 计划集成AI视频内容理解
 - [x] 支持 **背景音乐**，随机或者指定音乐文件，可设置`背景音乐音量`
 - [x] 视频素材来源 **高清**，而且 **无版权**，也可以使用自己的 **本地素材**
 - [x] 支持 **OpenAI**、**Moonshot**、**Azure**、**gpt4free**、**one-api**、**通义千问**、**Google Gemini**、**Ollama**、**DeepSeek**、 **文心一言**, **Pollinations** 等多种模型接入
@@ -64,6 +113,10 @@
 
 ### 后期计划 📅
 
+- [x] **逐词高亮字幕** - ✅ **已完成** (Microsoft TTS2 集成)
+- [ ] **WhisperX 集成** - 更精确的语音时间戳提取，支持更多语言的逐词高亮
+- [ ] **视频内容AI分析** - 基于视频画面内容的智能匹配，而非仅基于文本
+- [ ] **高级语义搜索** - 深度学习模型理解视频内容与语音内容的关联性
 - [ ] GPT-SoVITS 配音支持
 - [ ] 优化语音合成，利用大模型，使其合成的声音，更加自然，情绪更加丰富
 - [ ] 增加视频转场效果，使其看起来更加的流畅
@@ -145,58 +198,15 @@
 #### ① 克隆代码
 
 ```shell
-git clone https://github.com/harry0703/MoneyPrinterTurbo.git
-```
-
-#### ② 修改配置文件（可选，建议启动后也可以在 WebUI 里面配置）
-
-- 将 `config.example.toml` 文件复制一份，命名为 `config.toml`
-- 按照 `config.toml` 文件中的说明，配置好 `pexels_api_keys` 和 `llm_provider`，并根据 llm_provider 对应的服务商，配置相关的
-  API Key
-
-### Docker部署 🐳
-
-#### ① 启动Docker
-
-如果未安装 Docker，请先安装 https://www.docker.com/products/docker-desktop/
-
-如果是Windows系统，请参考微软的文档：
-
-1. https://learn.microsoft.com/zh-cn/windows/wsl/install
-2. https://learn.microsoft.com/zh-cn/windows/wsl/tutorials/wsl-containers
-
-```shell
-cd MoneyPrinterTurbo
-docker-compose up
-```
-
-> 注意：最新版的docker安装时会自动以插件的形式安装docker compose，启动命令调整为docker compose up
-
-#### ② 访问Web界面
-
-打开浏览器，访问 http://0.0.0.0:8501
-
-#### ③ 访问API文档
-
-打开浏览器，访问 http://0.0.0.0:8080/docs 或者 http://0.0.0.0:8080/redoc
-
-### 手动部署 📦
-
-> 视频教程
-
-- 完整的使用演示：https://v.douyin.com/iFhnwsKY/
-- 如何在Windows上部署：https://v.douyin.com/iFyjoW3M
-
-#### ① 创建虚拟环境
-
-建议使用 [conda](https://conda.io/projects/conda/en/latest/user-guide/install/index.html) 创建 python 虚拟环境
-
-```shell
-git clone https://github.com/harry0703/MoneyPrinterTurbo.git
+# Clone this enhanced fork with word highlighting features
+git clone https://github.com/[YOUR_USERNAME]/MoneyPrinterTurbo.git
 cd MoneyPrinterTurbo
 conda create -n MoneyPrinterTurbo python=3.11
 conda activate MoneyPrinterTurbo
 pip install -r requirements.txt
+
+## or oneliner
+conda env create -f MoneyPrinterTurbo_environment.yml 
 ```
 
 #### ② 安装好 ImageMagick
@@ -262,6 +272,15 @@ python main.py
 可以修改 `config.toml` 配置文件中的 `subtitle_provider` 进行切换
 
 建议使用 `edge` 模式，如果生成的字幕质量不好，再切换到 `whisper` 模式
+
+### 🔥 NEW: 逐词高亮字幕功能
+
+此增强版本新增了**单词级高亮功能**：
+
+- **启用方式**: 在Web界面的字幕设置中，勾选 "Enable Word Highlighting"
+- **高亮颜色**: 可自定义高亮颜色（默认为红色 #ff0000）
+- **兼容性**: 支持Microsoft TTS2的精确时间戳同步
+- **多行支持**: 自动处理换行文本的单词定位
 
 > 注意：
 
@@ -357,8 +376,11 @@ Trying to load the model directly from the local cache, if it exists.
 
 ## 反馈建议 📢
 
-- 可以提交 [issue](https://github.com/harry0703/MoneyPrinterTurbo/issues)
-  或者 [pull request](https://github.com/harry0703/MoneyPrinterTurbo/pulls)。
+### For This Enhanced Fork:
+- Submit [issues](https://github.com/[YOUR_USERNAME]/MoneyPrinterTurbo/issues) or [pull requests](https://github.com/[YOUR_USERNAME]/MoneyPrinterTurbo/pulls) for word highlighting features
+
+### For Original Project:
+- Submit [issues](https://github.com/harry0703/MoneyPrinterTurbo/issues) or [pull requests](https://github.com/harry0703/MoneyPrinterTurbo/pulls) to the original repository
 
 ## 许可证 📝
 
