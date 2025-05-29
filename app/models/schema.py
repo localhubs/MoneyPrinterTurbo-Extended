@@ -16,6 +16,7 @@ warnings.filterwarnings(
 class VideoConcatMode(str, Enum):
     random = "random"
     sequential = "sequential"
+    semantic = "semantic"
 
 
 class VideoTransitionMode(str, Enum):
@@ -51,6 +52,10 @@ class MaterialInfo:
     provider: str = "pexels"
     url: str = ""
     duration: int = 0
+    search_term: str = ""
+    # Image data for similarity comparison
+    thumbnail_url: str = ""  # Main thumbnail image
+    preview_images: list = None  # List of preview frame URLs
 
 
 class VideoParams(BaseModel):
@@ -107,6 +112,20 @@ class VideoParams(BaseModel):
     word_highlight_color: Optional[str] = "#ff0000"
     max_chars_per_line: Optional[int] = 40
     max_lines_per_subtitle: Optional[int] = 2
+    
+    # Semantic video settings
+    segmentation_method: Optional[str] = "sentences"
+    min_segment_length: Optional[int] = 25
+    similarity_threshold: Optional[float] = 0.5
+    diversity_threshold: Optional[int] = 5
+    max_video_reuse: Optional[int] = 2  # Maximum times a video can be reused
+    search_pool_size: Optional[int] = 50
+    semantic_model: Optional[str] = "all-mpnet-base-v2"
+    
+    # Image similarity settings (only when semantic mode is enabled)
+    enable_image_similarity: Optional[bool] = False
+    image_similarity_threshold: Optional[float] = 0.7
+    image_similarity_model: Optional[str] = "clip-vit-base-patch32"
     
     n_threads: Optional[int] = 2
     paragraph_number: Optional[int] = 1

@@ -2,9 +2,9 @@ import os
 import platform
 import sys
 from uuid import uuid4
-
 import streamlit as st
 from loguru import logger
+
 
 # Add the root directory of the project to the system path to allow importing modules from the project
 root_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -539,6 +539,7 @@ with middle_panel:
         video_concat_modes = [
             (tr("Sequential"), "sequential"),
             (tr("Random"), "random"),
+            (tr("Semantic Text Alignment"), "semantic"),
         ]
         video_sources = [
             (tr("Pexels"), "pexels"),
@@ -584,6 +585,216 @@ with middle_panel:
             video_concat_modes[selected_index][1]
         )
 
+        # Semantic Video Matching Settings - only show when semantic mode is selected
+        if params.video_concat_mode.value == "semantic":
+            with st.container(border=True):
+                st.write(tr("Semantic Video Matching Settings"))
+                st.info(tr("Semantic mode analyzes script content to intelligently match video clips with spoken words for better relevance."))
+                
+                # Check if sentence-transformers is available
+                try:
+                    import sentence_transformers
+                    st.success("✅ Semantic search dependencies are installed and ready.")
+                except ImportError:
+                    st.warning("⚠️ Semantic search requires sentence-transformers package to be installed.")
+                    st.code("pip install sentence-transformers scikit-learn")
+                
+                # Script Segmentation Method
+                segmentation_methods = [
+                    (tr("Split by Sentences"), "sentences"),
+                    (tr("Split by Paragraphs"), "paragraphs"),
+                ]
+                segmentation_index = st.selectbox(
+                    tr("Script Segmentation Method"),
+                    options=range(len(segmentation_methods)),
+                    format_func=lambda x: segmentation_methods[x][0],
+                    index=0,
+                )
+                params.segmentation_method = segmentation_methods[segmentation_index][1]
+                
+                # Minimum Segment Length
+                params.min_segment_length = st.slider(
+                    tr("Minimum Segment Length"),
+                    min_value=10,
+                    max_value=100,
+                    value=config.app.get("minimum_segment_length", 25),
+                    step=5,
+                    help=tr("Minimum character length for each script segment")
+                )
+                
+                # Similarity Threshold
+                params.similarity_threshold = st.slider(
+                    tr("Similarity Threshold"),
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=config.app.get("semantic_similarity_threshold", 0.5),
+                    step=0.05,
+                    help=tr("Minimum similarity score required for video-text matching")
+                )
+                
+                # Video Diversity Threshold
+                params.diversity_threshold = st.slider(
+                    tr("Video Diversity Threshold"),
+                    min_value=1,
+                    max_value=20,
+                    value=config.app.get("video_diversity_threshold", 5),
+                    step=1,
+                    help=tr("Controls how often the same video can be reused")
+                )
+                
+                # Max Video Reuse
+                params.max_video_reuse = st.slider(
+                    tr("Max Video Reuse"),
+                    min_value=1,
+                    max_value=10,
+                    value=2,
+                    step=1,
+                    help=tr("Maximum number of times a single video can be reused in the final output")
+                )
+                
+                # Search Pool Size
+                params.search_pool_size = st.slider(
+                    tr("Search Pool Size"),
+                    min_value=10,
+                    max_value=200,
+                    value=config.app.get("semantic_search_pool_size", 50),
+                    step=10,
+                    help=tr("Number of videos to consider for semantic matching")
+                )
+                
+                # Semantic Search Model
+                semantic_models = [
+                    ("MPNet Base V2 (Recommended)", "all-mpnet-base-v2"),
+                    ("MiniLM L6 V2 (Faster)", "all-MiniLM-L6-v2"),
+                    ("MiniLM L12 V2 (Balanced)", "all-MiniLM-L12-v2"),
+                ]
+                
+                # Find the index of the saved semantic model
+                saved_semantic_model = config.app.get("semantic_search_model", "all-mpnet-base-v2")
+                saved_semantic_model_index = 0
+                for i, (_, model_value) in enumerate(semantic_models):
+                    if model_value == saved_semantic_model:
+                        saved_semantic_model_index = i
+                        break
+                
+                model_index = st.selectbox(
+                    tr("Semantic Search Model"),
+                    options=range(len(semantic_models)),
+                    format_func=lambda x: semantic_models[x][0],
+                    index=saved_semantic_model_index,
+                )
+                params.semantic_model = semantic_models[model_index][1]
+                
+                # Image Similarity Settings
+                st.markdown("---")
+                st.subheader(tr("Image Similarity Settings"))
+                
+                # Check if image similarity dependencies are available
+                image_sim_available = False
+                image_sim_info = {"available": False, "dependencies": ["transformers", "torch", "pillow"]}
+                
+                try:
+                    # Test direct imports of required dependencies
+                    from transformers import CLIPProcessor, CLIPModel
+                    from PIL import Image
+                    import torch
+                    image_sim_available = True
+                    image_sim_info = {"available": True, "dependencies": []}
+                except ImportError as e:
+                    image_sim_available = False
+                    # Try to determine which specific dependency is missing
+                    missing_deps = []
+                    try:
+                        from transformers import CLIPProcessor, CLIPModel
+                    except ImportError:
+                        missing_deps.append("transformers")
+                    
+                    try:
+                        import torch
+                    except ImportError:
+                        missing_deps.append("torch")
+                    
+                    try:
+                        from PIL import Image
+                    except ImportError:
+                        missing_deps.append("pillow")
+                    
+                    if not missing_deps:
+                        missing_deps = ["transformers", "torch", "pillow"]
+                    
+                    image_sim_info = {"available": False, "dependencies": missing_deps}
+                
+                if image_sim_available:
+                    st.success("✅ Image similarity dependencies are installed and ready.")
+                    
+                    # Enable Image Similarity - use config default
+                    params.enable_image_similarity = st.checkbox(
+                        tr("Enable Image Similarity"),
+                        value=config.app.get("enable_image_similarity", False),
+                        help=tr("Compare text with video thumbnails and preview images for better matching")
+                    )
+                    
+                    if params.enable_image_similarity:
+                        # Image Similarity Threshold - use config default
+                        params.image_similarity_threshold = st.slider(
+                            tr("Image Similarity Threshold"),
+                            min_value=0.0,
+                            max_value=1.0,
+                            value=config.app.get("image_similarity_threshold", 0.7),
+                            step=0.05,
+                            help=tr("Minimum image similarity score required for video-text matching")
+                        )
+                        
+                        # Image Similarity Model - use config default
+                        image_models = [
+                            ("CLIP ViT-B/32 (Recommended)", "clip-vit-base-patch32"),
+                            ("CLIP ViT-B/16 (Higher Quality)", "clip-vit-base-patch16"),
+                            ("CLIP ViT-L/14 (Best Quality)", "clip-vit-large-patch14"),
+                        ]
+                        
+                        # Find the index of the saved model
+                        saved_model = config.app.get("image_similarity_model", "clip-vit-base-patch32")
+                        saved_model_index = 0
+                        for i, (_, model_value) in enumerate(image_models):
+                            if model_value == saved_model:
+                                saved_model_index = i
+                                break
+                        
+                        image_model_index = st.selectbox(
+                            tr("Image Similarity Model"),
+                            options=range(len(image_models)),
+                            format_func=lambda x: image_models[x][0],
+                            index=saved_model_index,
+                            help=tr("CLIP model for text-image similarity comparison")
+                        )
+                        params.image_similarity_model = image_models[image_model_index][1]
+                        
+                        st.info(tr("Image similarity analyzes video thumbnails and preview frames to find videos that visually match the script content."))
+                    else:
+                        # Set default values when image similarity is disabled
+                        params.image_similarity_threshold = config.app.get("image_similarity_threshold", 0.7)
+                        params.image_similarity_model = config.app.get("image_similarity_model", "clip-vit-base-patch32")
+                else:
+                    st.warning("⚠️ Image similarity requires additional dependencies.")
+                    missing_deps = ", ".join(image_sim_info.get("dependencies", []))
+                    st.code(f"pip install {missing_deps}")
+                    params.enable_image_similarity = False
+                    params.image_similarity_threshold = 0.7
+                    params.image_similarity_model = "clip-vit-base-patch32"
+        else:
+            # Set default values when not in semantic mode
+            params.segmentation_method = "sentences"
+            params.min_segment_length = config.app.get("minimum_segment_length", 25)
+            params.similarity_threshold = config.app.get("semantic_similarity_threshold", 0.5)
+            params.diversity_threshold = config.app.get("video_diversity_threshold", 5)
+            params.max_video_reuse = 2
+            params.search_pool_size = config.app.get("semantic_search_pool_size", 50)
+            params.semantic_model = config.app.get("semantic_search_model", "all-mpnet-base-v2")
+            # Image similarity defaults
+            params.enable_image_similarity = config.app.get("enable_image_similarity", False)
+            params.image_similarity_threshold = config.app.get("image_similarity_threshold", 0.7)
+            params.image_similarity_model = config.app.get("image_similarity_model", "clip-vit-base-patch32")
+
         # 视频转场模式
         video_transition_modes = [
             (tr("None"), VideoTransitionMode.none.value),
@@ -626,6 +837,11 @@ with middle_panel:
             options=[1, 2, 3, 4, 5],
             index=0,
         )
+        
+        # Show warning for multiple videos with semantic mode
+        if params.video_count > 1 and params.video_concat_mode.value == "semantic":
+            st.warning("⚠️ **Multiple Videos + Semantic Mode**: When generating multiple videos, the system will automatically use **Random** concatenation mode instead of Semantic mode to ensure video variety. Semantic mode would produce identical videos, which is not useful for multiple generation.")
+
     with st.container(border=True):
         st.write(tr("Audio Settings"))
 

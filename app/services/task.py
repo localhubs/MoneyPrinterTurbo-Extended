@@ -171,13 +171,19 @@ def get_video_materials(task_id, params, video_terms, audio_duration):
 
 
 def generate_final_videos(
-    task_id, params, downloaded_videos, audio_file, subtitle_path
+    task_id, params, downloaded_videos, audio_file, subtitle_path, video_script=""
 ):
     final_video_paths = []
     combined_video_paths = []
-    video_concat_mode = (
-        params.video_concat_mode if params.video_count == 1 else VideoConcatMode.random
-    )
+    
+    # Force random mode for multiple videos to ensure variety
+    # Semantic mode would produce identical videos, which doesn't make sense for multiple generation
+    video_concat_mode = params.video_concat_mode
+    if params.video_count > 1 and video_concat_mode.value == "semantic":
+        logger.info(f"🔄 Multiple videos requested ({params.video_count}), forcing random concatenation mode for variety")
+        logger.info("   ℹ️  Semantic mode would produce identical videos, which is not useful for multiple generation")
+        video_concat_mode = VideoConcatMode.random
+    
     video_transition_mode = params.video_transition_mode
 
     _progress = 50
@@ -196,6 +202,8 @@ def generate_final_videos(
             video_transition_mode=video_transition_mode,
             max_clip_duration=params.video_clip_duration,
             threads=params.n_threads,
+            script=video_script,
+            params=params,
         )
 
         _progress += 50 / params.video_count / 2
@@ -316,7 +324,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
     # 6. Generate final videos
     final_video_paths, combined_video_paths = generate_final_videos(
-        task_id, params, downloaded_videos, audio_file, subtitle_path
+        task_id, params, downloaded_videos, audio_file, subtitle_path, video_script
     )
 
     if not final_video_paths:

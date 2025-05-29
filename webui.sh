@@ -5,4 +5,7 @@
 
 # export HF_ENDPOINT=https://hf-mirror.com
 
+# Suppress torch._classes warning without breaking functionality
+export PYTHONWARNINGS="ignore::UserWarning:streamlit"
+
 streamlit run ./webui/Main.py --browser.serverAddress="0.0.0.0" --server.enableCORS=True --browser.gatherUsageStats=False
