@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import glob
 import itertools
 import os
@@ -34,6 +36,27 @@ from app.services.utils import video_effects
 from app.utils import utils
 from app.services import semantic_video
 
+# High-quality video encoding settings
+audio_codec = "aac"
+video_codec = "libx264"
+fps = 30
+
+# High-quality encoding parameters
+video_bitrate = "8000k"  # High bitrate for excellent quality
+audio_bitrate = "320k"   # High audio bitrate
+crf = 18                 # Constant Rate Factor - lower = higher quality (18-23 is excellent range)
+preset = "medium"        # Balance between encoding speed and compression efficiency
+
+# FFmpeg parameters for maximum quality
+quality_params = [
+    "-crf", str(crf),
+    "-preset", preset,
+    "-profile:v", "high",
+    "-level", "4.1",
+    "-pix_fmt", "yuv420p",
+    "-movflags", "+faststart"
+]
+
 class SubClippedVideoClip:
     def __init__(self, file_path, start_time=None, end_time=None, width=None, height=None, duration=None):
         self.file_path = file_path
@@ -49,10 +72,6 @@ class SubClippedVideoClip:
     def __str__(self):
         return f"SubClippedVideoClip(file_path={self.file_path}, start_time={self.start_time}, end_time={self.end_time}, duration={self.duration}, width={self.width}, height={self.height})"
 
-
-audio_codec = "aac"
-video_codec = "libx264"
-fps = 30
 
 def close_clip(clip):
     if clip is None:
@@ -245,7 +264,15 @@ def combine_videos(
                 
                 # Write clip to temp file
                 clip_file = f"{output_dir}/temp-semantic-clip-{i+1}.mp4"
-                clip.write_videofile(clip_file, logger=None, fps=fps, codec=video_codec)
+                clip.write_videofile(
+                    clip_file, 
+                    logger=None, 
+                    fps=fps, 
+                    codec=video_codec,
+                    bitrate=video_bitrate,
+                    audio_bitrate=audio_bitrate,
+                    ffmpeg_params=quality_params
+                )
                 
                 close_clip(clip)
                 
@@ -340,7 +367,15 @@ def combine_videos(
                     
                 # wirte clip to temp file
                 clip_file = f"{output_dir}/temp-clip-{i+1}.mp4"
-                clip.write_videofile(clip_file, logger=None, fps=fps, codec=video_codec)
+                clip.write_videofile(
+                    clip_file, 
+                    logger=None, 
+                    fps=fps, 
+                    codec=video_codec,
+                    bitrate=video_bitrate,
+                    audio_bitrate=audio_bitrate,
+                    ffmpeg_params=quality_params
+                )
                 
                 close_clip(clip)
             
@@ -361,7 +396,7 @@ def combine_videos(
             video_duration += clip.duration
         logger.info(f"video duration: {video_duration:.2f}s, audio duration: {audio_duration:.2f}s, looped {len(processed_clips)-len(base_clips)} clips")
      
-    # merge video clips progressively, avoid loading all videos at once to avoid memory overflow
+    # merge video clips using direct concatenation to avoid quality degradation
     logger.info("starting clip merging process")
     if not processed_clips:
         logger.warning("no clips available for merging")
@@ -371,9 +406,61 @@ def combine_videos(
     if len(processed_clips) == 1:
         logger.info("using single clip directly")
         shutil.copy(processed_clips[0].file_path, combined_video_path)
-        delete_files(processed_clips)
+        delete_files([processed_clips[0].file_path])
         logger.info("video combining completed")
         return combined_video_path
+    
+    # Load all clips at once and concatenate in single operation to preserve quality
+    logger.info(f"loading {len(processed_clips)} clips for direct concatenation")
+    clips_to_merge = []
+    
+    try:
+        for i, clip_info in enumerate(processed_clips):
+            logger.info(f"loading clip {i+1}/{len(processed_clips)}: {os.path.basename(clip_info.file_path)}")
+            clip = VideoFileClip(clip_info.file_path)
+            clips_to_merge.append(clip)
+        
+        # Concatenate all clips in single operation - NO QUALITY LOSS!
+        logger.info("concatenating all clips in single operation")
+        final_clip = concatenate_videoclips(clips_to_merge)
+        
+        # Write final result with high quality settings
+        logger.info("writing final concatenated video with high quality")
+        final_clip.write_videofile(
+            combined_video_path,
+            threads=threads,
+            logger=None,
+            temp_audiofile_path=output_dir,
+            audio_codec=audio_codec,
+            fps=fps,
+            codec=video_codec,
+            bitrate=video_bitrate,
+            audio_bitrate=audio_bitrate,
+            ffmpeg_params=quality_params
+        )
+        
+        # Clean up clips
+        for clip in clips_to_merge:
+            close_clip(clip)
+        close_clip(final_clip)
+        
+    except Exception as e:
+        logger.error(f"failed to concatenate clips: {str(e)}")
+        # Fallback to progressive merging if direct concatenation fails
+        logger.warning("falling back to progressive merging")
+        return _progressive_merge_fallback(processed_clips, combined_video_path, output_dir, threads)
+    
+    # clean temp files
+    clip_files = [clip.file_path for clip in processed_clips]
+    delete_files(clip_files)
+            
+    logger.info("video combining completed")
+    return combined_video_path
+
+
+def _progressive_merge_fallback(processed_clips, combined_video_path, output_dir, threads):
+    """Fallback progressive merging method if direct concatenation fails"""
+    logger.info("using progressive merge fallback")
     
     # create initial video file as base
     base_clip_path = processed_clips[0].file_path
@@ -403,6 +490,10 @@ def combine_videos(
                 temp_audiofile_path=output_dir,
                 audio_codec=audio_codec,
                 fps=fps,
+                codec=video_codec,
+                bitrate=video_bitrate,
+                audio_bitrate=audio_bitrate,
+                ffmpeg_params=quality_params
             )
             close_clip(base_clip)
             close_clip(next_clip)
@@ -422,8 +513,7 @@ def combine_videos(
     # clean temp files
     clip_files = [clip.file_path for clip in processed_clips]
     delete_files(clip_files)
-            
-    logger.info("video combining completed")
+    
     return combined_video_path
 
 
@@ -781,6 +871,10 @@ def generate_video(
         threads=params.n_threads or 2,
         logger=None,
         fps=fps,
+        codec=video_codec,
+        bitrate=video_bitrate,
+        audio_bitrate=audio_bitrate,
+        ffmpeg_params=quality_params
     )
     video_clip.close()
     del video_clip
@@ -826,7 +920,15 @@ def preprocess_video(materials: List[MaterialInfo], clip_duration=4):
 
             # Output the video to a file.
             video_file = f"{material.url}.mp4"
-            final_clip.write_videofile(video_file, fps=30, logger=None)
+            final_clip.write_videofile(
+                video_file, 
+                fps=30, 
+                logger=None,
+                codec=video_codec,
+                bitrate=video_bitrate,
+                audio_bitrate=audio_bitrate,
+                ffmpeg_params=quality_params
+            )
             close_clip(clip)
             material.url = video_file
             logger.success(f"image processed: {video_file}")
