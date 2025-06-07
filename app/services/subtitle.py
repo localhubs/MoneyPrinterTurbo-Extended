@@ -429,12 +429,20 @@ def _process_enhanced_subtitle(subtitle_data, max_chars_per_line, max_lines_per_
     text = subtitle_data['text'].strip()
     words = subtitle_data['words']
     
-    # Split text into lines
+    # Clean display text: remove commas but keep them for line break logic
+    display_text = text.replace(', ', ' ').replace(',', ' ')
+    
+    # Split text into lines using original text (with commas) for proper breaking
     lines = _wrap_text_into_lines(text, max_chars_per_line, max_lines_per_subtitle)
     
-    # Calculate line and position for each word
+    # Clean the lines for display (remove commas)
+    display_lines = [line.replace(', ', ' ').replace(',', ' ') for line in lines]
+    
+    # Calculate line and position for each word using cleaned text
     word_index = 0
-    for line_idx, line in enumerate(lines):
+    display_word_list = display_text.split()
+    
+    for line_idx, line in enumerate(display_lines):
         line_words = line.strip().split()
         position = 0
         
@@ -442,7 +450,11 @@ def _process_enhanced_subtitle(subtitle_data, max_chars_per_line, max_lines_per_
             # Find matching word in our timing data
             while word_index < len(words):
                 word_timing = words[word_index]
-                if word_timing.word.replace('.', '').replace(',', '').replace('!', '').replace('?', '') == line_word.replace('.', '').replace(',', '').replace('!', '').replace('?', ''):
+                # Clean both words for comparison
+                timing_word_clean = word_timing.word.replace('.', '').replace(',', '').replace('!', '').replace('?', '').strip()
+                line_word_clean = line_word.replace('.', '').replace(',', '').replace('!', '').replace('?', '').strip()
+                
+                if timing_word_clean.lower() == line_word_clean.lower():
                     word_timing.line = line_idx
                     word_timing.position = position
                     position += 1
@@ -453,39 +465,93 @@ def _process_enhanced_subtitle(subtitle_data, max_chars_per_line, max_lines_per_
     return EnhancedSubtitle(
         start_time=subtitle_data['start_time'],
         end_time=subtitle_data['end_time'],
-        text=text,
+        text=display_text,  # Use cleaned text for display
         words=words,
-        lines=lines
+        lines=display_lines  # Use cleaned lines for display
     )
 
 
 def _wrap_text_into_lines(text, max_chars_per_line, max_lines):
     """
-    Wrap text into lines respecting word boundaries
+    Wrap text into lines respecting word boundaries and comma-based breaks
     """
-    words = text.split()
+    # First, split by commas to get natural break points
+    comma_segments = [segment.strip() for segment in text.split(',') if segment.strip()]
+    
     lines = []
     current_line = ""
     
-    for word in words:
-        test_line = current_line + (" " if current_line else "") + word
+    for segment in comma_segments:
+        words = segment.split()
         
-        if len(test_line) <= max_chars_per_line:
-            current_line = test_line
-        else:
-            if current_line:
-                lines.append(current_line)
-                current_line = word
+        for word in words:
+            test_line = current_line + (" " if current_line else "") + word
+            
+            if len(test_line) <= max_chars_per_line:
+                current_line = test_line
             else:
-                # Word is too long for a line
-                lines.append(word)
-                current_line = ""
+                if current_line:
+                    lines.append(current_line)
+                    current_line = word
+                else:
+                    # Word is too long for a line
+                    lines.append(word)
+                    current_line = ""
+                
+                # Check max lines limit
+                if len(lines) >= max_lines:
+                    break
+        
+        # After each comma segment, consider breaking to new line
+        # if current line is reasonably long (> 60% of max width)
+        if current_line and len(current_line) > max_chars_per_line * 0.6:
+            lines.append(current_line)
+            current_line = ""
             
             # Check max lines limit
             if len(lines) >= max_lines:
                 break
     
+    # Add remaining text
     if current_line and len(lines) < max_lines:
         lines.append(current_line)
     
+    # Balance line lengths for better center alignment
+    if len(lines) > 1:
+        lines = _balance_subtitle_lines(lines, max_chars_per_line)
+    
     return lines
+
+
+def _balance_subtitle_lines(lines, max_chars_per_line):
+    """
+    Balance subtitle line lengths for better visual appearance when center-aligned
+    """
+    if len(lines) <= 1:
+        return lines
+    
+    balanced_lines = []
+    
+    for i, line in enumerate(lines):
+        if i < len(lines) - 1:  # Not the last line
+            current_length = len(line)
+            next_line = lines[i + 1]
+            
+            # Try to balance by moving words between lines
+            words_current = line.split()
+            words_next = next_line.split()
+            
+            # If current line is much shorter than max width and next line has words
+            if current_length < max_chars_per_line * 0.7 and len(words_next) > 1:
+                # Try moving first word from next line to current line
+                test_line = line + " " + words_next[0]
+                
+                if len(test_line) <= max_chars_per_line:
+                    # Move the word
+                    balanced_lines.append(test_line)
+                    lines[i + 1] = " ".join(words_next[1:])  # Update next line
+                    continue
+        
+        balanced_lines.append(line)
+    
+    return balanced_lines

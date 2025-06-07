@@ -531,44 +531,98 @@ def wrap_text(text, max_width, font="Arial", fontsize=60):
         return text, height
 
     processed = True
-
     _wrapped_lines_ = []
     words = text.split(" ")
     _txt_ = ""
+    
+    # Improved word wrapping with better line balancing
     for word in words:
         _before = _txt_
-        _txt_ += f"{word} "
-        _width, _height = get_text_size(_txt_)
+        test_txt = _txt_ + f"{word} " if _txt_ else f"{word} "
+        _width, _height = get_text_size(test_txt)
+        
         if _width <= max_width:
-            continue
+            _txt_ = test_txt
         else:
             if _txt_.strip() == word.strip():
+                # Single word is too long, force break
                 processed = False
                 break
-            _wrapped_lines_.append(_before)
+            
+            # Add current line and start new line
+            _wrapped_lines_.append(_before.strip())
             _txt_ = f"{word} "
-    _wrapped_lines_.append(_txt_)
+    
+    # Add remaining text
+    if _txt_.strip():
+        _wrapped_lines_.append(_txt_.strip())
+    
     if processed:
-        _wrapped_lines_ = [line.strip() for line in _wrapped_lines_]
-        result = "\n".join(_wrapped_lines_).strip()
+        # Balance line lengths for better visual appearance
+        _wrapped_lines_ = _balance_line_lengths(_wrapped_lines_, font, max_width)
+        result = "\n".join(_wrapped_lines_)
         height = len(_wrapped_lines_) * height
         return result, height
 
+    # Fallback: character-by-character wrapping
     _wrapped_lines_ = []
     chars = list(text)
     _txt_ = ""
-    for word in chars:
-        _txt_ += word
-        _width, _height = get_text_size(_txt_)
+    for char in chars:
+        test_txt = _txt_ + char
+        _width, _height = get_text_size(test_txt)
         if _width <= max_width:
-            continue
+            _txt_ = test_txt
         else:
-            _wrapped_lines_.append(_txt_)
-            _txt_ = ""
-    _wrapped_lines_.append(_txt_)
-    result = "\n".join(_wrapped_lines_).strip()
+            if _txt_:
+                _wrapped_lines_.append(_txt_)
+            _txt_ = char
+    
+    if _txt_:
+        _wrapped_lines_.append(_txt_)
+    
+    result = "\n".join(_wrapped_lines_)
     height = len(_wrapped_lines_) * height
     return result, height
+
+
+def _balance_line_lengths(lines, font, max_width):
+    """
+    Balance line lengths for better visual appearance when center-aligned
+    """
+    if len(lines) <= 1:
+        return lines
+    
+    def get_text_width(text):
+        left, top, right, bottom = font.getbbox(text.strip())
+        return right - left
+    
+    balanced_lines = []
+    
+    for i, line in enumerate(lines):
+        if i < len(lines) - 1:  # Not the last line
+            current_line_width = get_text_width(line)
+            next_line = lines[i + 1]
+            
+            # Try to balance by moving words between lines
+            words_current = line.split()
+            words_next = next_line.split()
+            
+            # If current line is much shorter than max width and next line has words
+            if current_line_width < max_width * 0.7 and len(words_next) > 1:
+                # Try moving first word from next line to current line
+                test_line = line + " " + words_next[0]
+                test_width = get_text_width(test_line)
+                
+                if test_width <= max_width:
+                    # Move the word
+                    balanced_lines.append(test_line)
+                    lines[i + 1] = " ".join(words_next[1:])  # Update next line
+                    continue
+        
+        balanced_lines.append(line)
+    
+    return balanced_lines
 
 
 def create_enhanced_subtitle_clips(enhanced_subtitle_path, params, video_width, video_height, font_path):
@@ -606,10 +660,14 @@ def create_enhanced_subtitle_clips(enhanced_subtitle_path, params, video_width, 
         except:
             font = ImageFont.load_default()
         
+        # Clean text: remove commas but keep line breaks they indicate
+        # Replace comma + space with just space, and standalone commas with nothing
+        cleaned_text = text.replace(', ', ' ').replace(',', ' ')
+        
         # Wrap text using the same logic
         max_width = int(video_width * 0.9)
         wrapped_txt, _ = wrap_text(
-            text, max_width=max_width, font=font_path, fontsize=font_size
+            cleaned_text, max_width=max_width, font=font_path, fontsize=font_size
         )
         
         # Split into lines and words
@@ -630,11 +688,20 @@ def create_enhanced_subtitle_clips(enhanced_subtitle_path, params, video_width, 
         stroke_rgb = hex_to_rgb(stroke_color) if stroke_color else None
         
         word_index = 0
-        y_pos = 20  # Start padding
+        y_pos = 20
         
         for line in lines:
             words = line.split()
-            x_pos = 20  # Start padding
+            
+            # Calculate total line width for center alignment
+            line_width = 0
+            for word in words:
+                word_bbox = font.getbbox(word + ' ')
+                line_width += word_bbox[2] - word_bbox[0]
+            
+            # Center the line
+            x_pos = (img_width - line_width) // 2
+            x_pos = max(20, x_pos)  # Ensure minimum padding
             
             for word in words:
                 # Determine color for this word
@@ -771,9 +838,13 @@ def generate_video(
         params.font_size = int(params.font_size)
         params.stroke_width = int(params.stroke_width)
         phrase = subtitle_item[1]
+        
+        # Clean text: remove commas but keep spaces for readability
+        cleaned_phrase = phrase.replace(', ', ' ').replace(',', ' ')
+        
         max_width = video_width * 0.9
         wrapped_txt, txt_height = wrap_text(
-            phrase, max_width=max_width, font=font_path, fontsize=params.font_size
+            cleaned_phrase, max_width=max_width, font=font_path, fontsize=params.font_size
         )
         interline = int(params.font_size * 0.25)
         size=(int(max_width), int(txt_height + params.font_size * 0.25 + (interline * (wrapped_txt.count("\n") + 1))))
@@ -786,8 +857,10 @@ def generate_video(
             bg_color=params.text_background_color,
             stroke_color=params.stroke_color,
             stroke_width=params.stroke_width,
+            method='caption',  # Use caption method for better text wrapping
+            size=size,
+            align='center',  # Center-align the text
             # interline=interline,
-            # size=size,
         )
         duration = subtitle_item[0][1] - subtitle_item[0][0]
         _clip = _clip.with_start(subtitle_item[0][0])
