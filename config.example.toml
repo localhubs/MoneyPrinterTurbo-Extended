@@ -153,9 +153,15 @@ endpoint = ""
 # 视频素材存放位置
 # material_directory = ""                    #表示将视频素材下载到默认的文件夹，默认文件夹为当前项目下的 ./storage/cache_videos
 # material_directory = "/user/harry/videos"  #表示将视频素材下载到指定的文件夹中
-# material_directory = "task"                #表示将视频素材下载到当前任务的文件夹中，这种方式无法共享已经下载的视频素材
-
 material_directory = ""
+
+# Enable verbose logging for debugging
+# When set to true, detailed progress logs will be shown for every video processing step
+# When set to false, only summary logs will be shown (every 10 segments)
+# 启用详细日志记录用于调试
+# 设置为 true 时，将显示每个视频处理步骤的详细进度日志
+# 设置为 false 时，仅显示摘要日志（每10个片段）
+verbose = false
 
 # Used for state management of the task
 enable_redis = false

@@ -11,6 +11,9 @@ import re
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
+# Import config to check verbose flag
+from app.config import config
+
 # Global model instance
 _model = None
 _model_name = None
@@ -207,8 +210,9 @@ def find_best_video_for_sentence(
     image_similarity_model: str = "clip-vit-base-patch32"
 ) -> Optional[Dict]:
     """Find the best video for a given sentence with strong diversity controls"""
-    logger.info(f"🔍 Finding best video for sentence: '{sentence[:60]}...'")
-    logger.info(f"📊 Analyzing {len(video_metadata)} available videos")
+    if config.app.get('verbose', False):
+        logger.info(f"🔍 Finding best video for sentence: '{sentence[:60]}...'")
+        logger.info(f"📊 Analyzing {len(video_metadata)} available videos")
     
     # Calculate all similarities and scores once
     video_scores = []
@@ -220,7 +224,8 @@ def find_best_video_for_sentence(
             
             # Minimal logging - only every 5th video
             if i % 5 == 1 or i == len(video_metadata):
-                logger.debug(f"🔄 Processing video {i}/{len(video_metadata)}: {os.path.basename(video_path)}")
+                if config.app.get('verbose', False):
+                    logger.debug(f"🔄 Processing video {i}/{len(video_metadata)}: {os.path.basename(video_path)}")
             
             # Calculate similarity once - no debug logging
             similarity = calculate_similarity(sentence, search_term)
@@ -322,31 +327,34 @@ def find_best_video_for_sentence(
     
     # Log metadata summary
     videos_with_metadata = len([v for v in video_metadata if v.get('search_term')])
-    logger.info("📈 Video metadata summary:")
-    logger.info(f"   ✅ Videos with metadata: {videos_with_metadata}/{len(video_metadata)} ({videos_with_metadata/len(video_metadata)*100:.1f}%)")
+    if config.app.get('verbose', False):
+        logger.info("📈 Video metadata summary:")
+        logger.info(f"   ✅ Videos with metadata: {videos_with_metadata}/{len(video_metadata)} ({videos_with_metadata/len(video_metadata)*100:.1f}%)")
     
     # Log usage statistics
     if used_videos:
         usage_stats = {}
         for path, count in used_videos.items():
             usage_stats[count] = usage_stats.get(count, 0) + 1
-        logger.info("🔄 Video usage statistics:")
-        for usage_count, video_count in sorted(usage_stats.items()):
-            logger.info(f"   Used {usage_count} times: {video_count} videos")
+        if config.app.get('verbose', False):
+            logger.info("🔄 Video usage statistics:")
+            for usage_count, video_count in sorted(usage_stats.items()):
+                logger.info(f"   Used {usage_count} times: {video_count} videos")
     
     # Sort scores for logging top candidates  
     video_scores.sort(key=lambda x: x['final_score'], reverse=True)
     
-    logger.info("🏆 Top video candidates:")
-    for i, score_data in enumerate(video_scores[:3], 1):
-        video = score_data['video']
-        text_sim = score_data['text_similarity']
-        image_sim = score_data['image_similarity']
-        combined_sim = score_data['combined_similarity']
-        usage = score_data['usage']
-        penalty = score_data['penalty']
-        score = score_data['final_score']
-        logger.info(f"   {i}. {os.path.basename(video['video_path'])}: text_similarity={text_sim:.3f}, image_similarity={image_sim:.3f}, combined_similarity={combined_sim:.3f}, used={usage}/{max_video_reuse}x, final_score={score:.3f}")
+    if config.app.get('verbose', False):
+        logger.info("🏆 Top video candidates:")
+        for i, score_data in enumerate(video_scores[:3], 1):
+            video = score_data['video']
+            text_sim = score_data['text_similarity']
+            image_sim = score_data['image_similarity']
+            combined_sim = score_data['combined_similarity']
+            usage = score_data['usage']
+            penalty = score_data['penalty']
+            score = score_data['final_score']
+            logger.info(f"   {i}. {os.path.basename(video['video_path'])}: text_similarity={text_sim:.3f}, image_similarity={image_sim:.3f}, combined_similarity={combined_sim:.3f}, used={usage}/{max_video_reuse}x, final_score={score:.3f}")
     
     if best_score < similarity_threshold:
         logger.warning(f"⚠️  Best similarity ({best_score:.3f}) below threshold ({similarity_threshold}), using anyway")
@@ -361,12 +369,14 @@ def find_best_video_for_sentence(
                 selected_video_scores = score_data
                 break
         
-        logger.success(f"🎯 SELECTED: {os.path.basename(best_video['video_path'])} with similarity {best_score:.3f} (will be used {usage + 1}/{max_video_reuse} times)")
+        if config.app.get('verbose', False):
+            logger.success(f"🎯 SELECTED: {os.path.basename(best_video['video_path'])} with similarity {best_score:.3f} (will be used {usage + 1}/{max_video_reuse} times)")
     else:
         logger.error("❌ No suitable video found - all videos may be overused")
         selected_video_scores = None
     
-    logger.info("=" * 80)
+    if config.app.get('verbose', False):
+        logger.info("=" * 80)
     
     # Return both the video and its detailed scores
     return best_video, selected_video_scores
@@ -427,7 +437,12 @@ def select_videos_for_script(
     used_videos = {}
     
     for i, segment in enumerate(segments, 1):
-        logger.info(f"🔄 PROCESSING SEGMENT {i}/{len(segments)}")
+        if config.app.get('verbose', False):
+            logger.info(f"🔄 PROCESSING SEGMENT {i}/{len(segments)}")
+        else:
+            # Show progress every 10 segments in non-verbose mode
+            if i % 10 == 1 or i == len(segments):
+                logger.info(f"🔄 PROCESSING SEGMENT {i}/{len(segments)}")
         
         best_video, selected_video_scores = find_best_video_for_sentence(
             segment, 
@@ -454,10 +469,18 @@ def select_videos_for_script(
             used_videos[video_path] = used_videos.get(video_path, 0) + 1
             
             # Enhanced logging with both similarity scores
-            if selected_video_scores and enable_image_similarity and IMAGE_SIMILARITY_AVAILABLE:
-                logger.success(f"✅ SEGMENT {i} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text: {selected_video_scores['text_similarity']:.3f}, image: {selected_video_scores['image_similarity']:.3f}, combined: {selected_video_scores['combined_similarity']:.3f})")
+            if config.app.get('verbose', False):
+                if selected_video_scores and enable_image_similarity and IMAGE_SIMILARITY_AVAILABLE:
+                    logger.success(f"✅ SEGMENT {i} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text: {selected_video_scores['text_similarity']:.3f}, image: {selected_video_scores['image_similarity']:.3f}, combined: {selected_video_scores['combined_similarity']:.3f})")
+                else:
+                    logger.success(f"✅ SEGMENT {i} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text similarity: {selected_video_scores['text_similarity']:.3f})")
             else:
-                logger.success(f"✅ SEGMENT {i} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text similarity: {selected_video_scores['text_similarity']:.3f})")
+                # Show completion every 10 segments in non-verbose mode
+                if i % 10 == 1 or i == len(segments):
+                    if selected_video_scores and enable_image_similarity and IMAGE_SIMILARITY_AVAILABLE:
+                        logger.success(f"✅ SEGMENT {i} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text: {selected_video_scores['text_similarity']:.3f}, image: {selected_video_scores['image_similarity']:.3f}, combined: {selected_video_scores['combined_similarity']:.3f})")
+                    else:
+                        logger.success(f"✅ SEGMENT {i} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text similarity: {selected_video_scores['text_similarity']:.3f})")
         else:
             logger.error(f"❌ SEGMENT {i} FAILED: No suitable video found")
     
