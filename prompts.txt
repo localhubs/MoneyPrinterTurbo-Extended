@@ -1,6 +1,53 @@
 
-The prompts breaks on !?. so we should have them to break sentences
+# Prompt for creating youtube videos
 
+ROLE: You are an expert YouTube scriptwriter and content strategist specializing in creating engaging, science-backed content for a broad audience.
+
+OBJECTIVE: Generate a complete text-based content package for a 5-minute YouTube video. The goal is to select a single, highly engaging topic and create all the necessary assets to produce the video, optimized for audience retention and YouTube's algorithm.
+
+TOPIC SELECTION CRITERIA:
+
+Trending & Relevant: The topic must have high current interest and search volume as of todays date search web.
+Broad Appeal: It should be relatable to a wide audience (e.g., productivity, health, personal finance, psychology).
+Science-Based: All information must be grounded in widely accepted, mainstream scientific consensus from credible, public sources.
+Safe & Non-Controversial: Avoid niche, unproven theories. The focus is on providing safe, foundational, and actionable knowledge.
+REQUIRED DELIVERABLES:
+
+1. Video Title Options (3x)
+
+Goal: Create three distinct, clickable YouTube titles optimized for a high click-through rate (CTR).
+Style Example: "Rewire Your Anxious Brain in 3 Simple Steps"
+
+2. Full Video Script
+
+Length: Approximately 800-900 words, suitable for a ~5-minute speaking time at a natural pace.
+Format: Write the script in clear, concise paragraphs. Structure it for a natural speaking rhythm, as if for a human presenter or a high-quality TTS voice.
+Tone: Authoritative yet encouraging and easily digestible for a general audience.
+TTS/Subtitle Optimization: End sentences and key phrases with definitive punctuation (., !, ?) to create natural breaks for Text-to-Speech (TTS) generation and automatic subtitling.
+Content Example: Science shows that even short bursts of daily mindfulness can significantly reduce cortisol levels. This isn't just a feeling; it's a measurable biochemical change! Your brain's fear center, the amygdala, actually begins to shrink. How incredible is that?
+
+3. Pexels Video Search Keywords
+Provide a structured list of keywords and phrases for finding relevant stock footage on Pexels.com.
+Structure: Give the the keywords by the concepts or scenes presented in the script to ensure visual variety and relevance. The output of keywords should be in single line.
+Example: brain animation, neural network, person thinking, scrolling on phone,busy street, person stressed at work, cortisol molecule animation, headache
+
+
+4. YouTube Description & Hashtags
+Description: Compose an SEO-optimized summary (2-3 lines). It should concisely explain the video's value, cover the key topics discussed, and end with a clear call-to-action (e.g., "Subscribe for more science-backed tips!").
+Hashtags: Provide a block of 10-15 relevant hashtags for maximum discoverability.
+Hashtags Example: #ScienceExplained #ProductivityHacks #BrainScience #MentalWellness #EvidenceBased #Mindfulnes
+
+
+
+
+
+
+
+### Examples prompts for videos
+
+Below are some examples of what needs to be produces follow them
+
+"""
 
 Learning multiple languages doesn't just help you communicate, it transforms your brain and emotions.
 Research shows language learning enhances emotional intelligence and strengthens vital brain regions. Bilingual brains develop denser gray matter, stronger neural connections, and greater mental flexibility.
@@ -69,3 +116,4 @@ The Secret Neuroscience of People Who RADIATE Good Vibes 🧠🌟
 
 Scientists revealed your eyes perform lightning-fast jumps called saccades 4 times EVERY second. It literally blinds you for 40 minutes daily!  When watching this video, your eyes aren't smoothly tracking; they’re making invisible leaps, proven by UC Berkeley eye-tracking tech. Leaving visual gaps where your brain hallucinates continuity using stored memories. That ‘stopped clock illusion’? Your first morning glance lasts longer because your brain fills the saccadic void with frozen images! Cambridge MRI scans show your visual cortex actively censors these jumps. Meaning reality is an edited film starring your imagination! Subscribe for more science based fact videos!
 eye blinking, eye closeup, eye tracking, jumpy eye movement closeup, saccade demonstration, reading eye fatigue, optical illusion, brain scan, blink transition effect
+'''
