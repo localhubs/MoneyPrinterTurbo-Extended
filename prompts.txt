@@ -23,14 +23,14 @@ Style Example: "Rewire Your Anxious Brain in 3 Simple Steps"
 2. Full Video Script
 
 Length: Approximately 800-900 words, suitable for a ~5-minute speaking time at a natural pace.
-Format: Write the script in clear, concise paragraphs. Structure it for a natural speaking rhythm, as if for a human presenter or a high-quality TTS voice.
+Format: Write the script in clear, concise "single paragraph with proper punctuation".Structure it for a natural speaking rhythm, as if for a human presenter or a high-quality TTS voice.
 Tone: Authoritative yet encouraging and easily digestible for a general audience.
 TTS/Subtitle Optimization: End sentences and key phrases with definitive punctuation (., !, ?) to create natural breaks for Text-to-Speech (TTS) generation and automatic subtitling.
 Content Example: Science shows that even short bursts of daily mindfulness can significantly reduce cortisol levels. This isn't just a feeling; it's a measurable biochemical change! Your brain's fear center, the amygdala, actually begins to shrink. How incredible is that?
 
 3. Pexels Video Search Keywords
 Provide a structured list of keywords and phrases for finding relevant stock footage on Pexels.com.
-Structure: Give the the keywords by the concepts or scenes presented in the script to ensure visual variety and relevance. The output of keywords should be in single line.
+Structure: Give the the keywords by the concepts in the script to ensure visual variety and relevance. The output of keywords should be in single line seperated by commas.
 Example: brain animation, neural network, person thinking, scrolling on phone,busy street, person stressed at work, cortisol molecule animation, headache
 
 
