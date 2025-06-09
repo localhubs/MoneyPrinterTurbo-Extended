@@ -5,6 +5,8 @@ Semantic video selection service for intelligent video-text matching
 
 import os
 import json
+import itertools
+import math
 from typing import List, Dict, Optional, Tuple
 from loguru import logger
 import re
@@ -220,28 +222,25 @@ def find_best_video_for_sentence(
     for i, video_meta in enumerate(video_metadata, 1):
         try:
             video_path = video_meta['video_path']
-            search_term = video_meta['search_term']
+            search_term = video_meta.get('search_term', '')
             
-            # Minimal logging - only every 5th video
-            if i % 5 == 1 or i == len(video_metadata):
-                if config.app.get('verbose', False):
-                    logger.debug(f"🔄 Processing video {i}/{len(video_metadata)}: {os.path.basename(video_path)}")
-            
-            # Calculate similarity once - no debug logging
+            # Calculate text similarity
             similarity = calculate_similarity(sentence, search_term)
             
-            # Calculate image similarity if enabled and available
+            # Initialize image similarity
             image_similarity_score = 0.0
+            
+            # Calculate image similarity if enabled
             if enable_image_similarity and IMAGE_SIMILARITY_AVAILABLE:
                 try:
-                    # Check if image similarity model is healthy before proceeding
-                    if hasattr(image_similarity, 'is_model_healthy') and not image_similarity.is_model_healthy():
-                        logger.warning(f"⚠️ Image similarity model unhealthy, skipping for video {i}")
-                        image_similarity_score = 0.0
-                    else:
-                        image_similarity_score = image_similarity.calculate_video_image_similarity(
-                            sentence, video_meta, image_similarity_model
-                        )
+                    image_similarity_score = image_similarity.calculate_video_image_similarity(
+                        sentence, 
+                        video_meta, 
+                        image_similarity_model
+                    )
+                    
+                    if config.app.get('verbose', False):
+                        logger.info(f"   📷 Video {i}: Image similarity = {image_similarity_score:.3f}")
                         
                 except Exception as e:
                     logger.error(f"❌ Failed to calculate image similarity for video {i}: {e}")
@@ -268,21 +267,34 @@ def find_best_video_for_sentence(
             # Enhanced diversity penalty system based on max_video_reuse
             usage_count = used_videos.get(video_path, 0)
             
-            # Dynamic penalty based on max_video_reuse setting
-            if usage_count == 0:
-                diversity_penalty = 0.0  # No penalty for first use
-            elif usage_count == 1 and max_video_reuse >= 2:
-                diversity_penalty = 0.2  # Light penalty for second use
-            elif usage_count == 2 and max_video_reuse >= 3:
-                diversity_penalty = 0.4  # Moderate penalty for third use
-            elif usage_count == 3 and max_video_reuse >= 4:
-                diversity_penalty = 0.6  # Heavy penalty for fourth use
+            # Special handling for max_video_reuse = 1
+            if max_video_reuse == 1:
+                # Check if there are any unused videos available
+                unused_videos_available = any(used_videos.get(v['video_path'], 0) == 0 for v in video_metadata)
+                
+                if usage_count == 0:
+                    diversity_penalty = 0.0  # No penalty for unused videos
+                elif usage_count >= 1 and unused_videos_available:
+                    diversity_penalty = 1.0  # High penalty if unused videos are still available
+                else:
+                    # All videos have been used once, allow reuse with moderate penalty
+                    diversity_penalty = 0.3  # Moderate penalty for reuse when necessary
             else:
-                diversity_penalty = 1.0  # Eliminate from consideration
-            
-            # Additional penalty if we've exceeded max_video_reuse
-            if usage_count >= max_video_reuse:
-                diversity_penalty = 1.0  # Completely eliminate from consideration
+                # Original logic for max_video_reuse > 1
+                if usage_count == 0:
+                    diversity_penalty = 0.0  # No penalty for first use
+                elif usage_count == 1 and max_video_reuse >= 2:
+                    diversity_penalty = 0.2  # Light penalty for second use
+                elif usage_count == 2 and max_video_reuse >= 3:
+                    diversity_penalty = 0.4  # Moderate penalty for third use
+                elif usage_count == 3 and max_video_reuse >= 4:
+                    diversity_penalty = 0.6  # Heavy penalty for fourth use
+                else:
+                    diversity_penalty = 1.0  # Eliminate from consideration
+                
+                # Additional penalty if we've exceeded max_video_reuse
+                if usage_count >= max_video_reuse:
+                    diversity_penalty = 1.0  # Completely eliminate from consideration
             
             final_score = combined_similarity - diversity_penalty
             
@@ -385,6 +397,7 @@ def select_videos_for_script(
     script: str,
     video_metadata: List[Dict],
     audio_duration: float,
+    max_clip_duration: int = 5,
     similarity_threshold: float = 0.5,
     diversity_threshold: int = 5,
     max_video_reuse: int = 2,
@@ -428,21 +441,74 @@ def select_videos_for_script(
     segments = segment_script_into_sentences(script, min_segment_length, max_length=120)
     logger.info("=" * 100)
     
-    # Calculate duration per segment
-    duration_per_segment = audio_duration / len(segments)
-    logger.info(f"⏱️  Approximate duration per segment: {duration_per_segment:.2f} seconds")
+    # Calculate how many video clips we need to fill the audio duration
+    # This is the key fix - we need enough video selections to fill audio duration, not just match script segments
+    needed_video_clips = int(audio_duration / max_clip_duration) + (1 if audio_duration % max_clip_duration > 0 else 0)
+    available_videos = len(video_metadata)
+    
+    # Handle insufficient videos scenario - NEVER allow blank screen
+    if needed_video_clips > available_videos:
+        required_reuse_per_video = math.ceil(needed_video_clips / available_videos)
+        
+        if max_video_reuse == 1:
+            # User wanted no reuse, but we need to reuse to avoid blank screen
+            logger.warning(f"⚠️  INSUFFICIENT VIDEOS: Need {needed_video_clips} clips but only {available_videos} videos available")
+            logger.warning(f"⚠️  max_video_reuse=1 requested, but this would cause blank screen!")
+            logger.warning(f"⚠️  OVERRIDING to reuse each video {required_reuse_per_video} times to fill audio duration")
+            logger.warning(f"⚠️  Consider downloading more videos or setting max_video_reuse > 1")
+            actual_max_reuse = required_reuse_per_video
+        else:
+            # Check if we need more reuse than allowed
+            if required_reuse_per_video > max_video_reuse:
+                logger.warning(f"⚠️  Need to reuse videos {required_reuse_per_video} times, but max_video_reuse={max_video_reuse}")
+                logger.warning(f"⚠️  Will respect max_video_reuse limit - this may cause shorter video duration")
+                actual_max_reuse = max_video_reuse
+            else:
+                actual_max_reuse = required_reuse_per_video
+                logger.info(f"🔁 Will reuse each video up to {actual_max_reuse} times to fill duration")
+        
+        logger.info(f"📊 Video reuse strategy: {available_videos} videos × {actual_max_reuse} reuse = {available_videos * actual_max_reuse} total clips")
+    else:
+        # Sufficient videos available
+        if max_video_reuse == 1:
+            logger.info(f"✅ Sufficient videos available: {available_videos} videos for {needed_video_clips} clips (no reuse needed)")
+        else:
+            logger.info(f"✅ Sufficient videos available: {available_videos} videos for {needed_video_clips} clips")
+    
+    duration_per_video = audio_duration / needed_video_clips
+    logger.info(f"⏱️  Target video clips needed: {needed_video_clips}")
+    logger.info(f"⏱️  Duration per video clip: {duration_per_video:.2f} seconds") 
+    logger.info(f"📝 Script segments available: {len(segments)}")
     logger.info("=" * 100)
     
     selected_videos = []
     used_videos = {}
+    segments_without_videos = 0
     
-    for i, segment in enumerate(segments, 1):
-        if config.app.get('verbose', False):
-            logger.info(f"🔄 PROCESSING SEGMENT {i}/{len(segments)}")
+    # Determine the actual max reuse to use based on availability
+    if needed_video_clips > available_videos:
+        required_reuse_per_video = math.ceil(needed_video_clips / available_videos)
+        if max_video_reuse == 1:
+            actual_max_reuse = required_reuse_per_video  # Override to prevent blank screen
         else:
-            # Show progress every 10 segments in non-verbose mode
-            if i % 10 == 1 or i == len(segments):
-                logger.info(f"🔄 PROCESSING SEGMENT {i}/{len(segments)}")
+            actual_max_reuse = min(required_reuse_per_video, max_video_reuse)
+    else:
+        actual_max_reuse = max_video_reuse  # Use original setting
+    
+    # Create video selections - repeat segments cyclically if we need more videos than segments
+    video_selections_needed = needed_video_clips
+    segment_cycle = itertools.cycle(segments) if segments else []
+    
+    for i in range(video_selections_needed):
+        # Get the next segment from the cycle
+        segment = next(segment_cycle) if segments else "Generic content"
+        
+        if config.app.get('verbose', False):
+            logger.info(f"🔄 PROCESSING VIDEO SELECTION {i+1}/{video_selections_needed}")
+        else:
+            # Show progress every 10 selections in non-verbose mode
+            if (i+1) % 10 == 1 or (i+1) == video_selections_needed:
+                logger.info(f"🔄 PROCESSING VIDEO SELECTION {i+1}/{video_selections_needed}")
         
         best_video, selected_video_scores = find_best_video_for_sentence(
             segment, 
@@ -450,7 +516,7 @@ def select_videos_for_script(
             used_videos,
             similarity_threshold,
             diversity_threshold,
-            max_video_reuse,
+            actual_max_reuse,  # Use calculated actual max reuse
             enable_image_similarity,
             image_similarity_threshold,
             image_similarity_model
@@ -461,7 +527,7 @@ def select_videos_for_script(
                 'video_path': best_video['video_path'],
                 'segment': segment,
                 'search_term': best_video['search_term'],
-                'duration': duration_per_segment
+                'duration': duration_per_video
             })
             
             # Update usage count
@@ -471,22 +537,27 @@ def select_videos_for_script(
             # Enhanced logging with both similarity scores
             if config.app.get('verbose', False):
                 if selected_video_scores and enable_image_similarity and IMAGE_SIMILARITY_AVAILABLE:
-                    logger.success(f"✅ SEGMENT {i} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text: {selected_video_scores['text_similarity']:.3f}, image: {selected_video_scores['image_similarity']:.3f}, combined: {selected_video_scores['combined_similarity']:.3f})")
+                    logger.success(f"✅ VIDEO {i+1} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text: {selected_video_scores['text_similarity']:.3f}, image: {selected_video_scores['image_similarity']:.3f}, combined: {selected_video_scores['combined_similarity']:.3f})")
                 else:
-                    logger.success(f"✅ SEGMENT {i} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text similarity: {selected_video_scores['text_similarity']:.3f})")
+                    logger.success(f"✅ VIDEO {i+1} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text similarity: {selected_video_scores['text_similarity']:.3f})")
             else:
-                # Show completion every 10 segments in non-verbose mode
-                if i % 10 == 1 or i == len(segments):
+                # Show completion every 10 selections in non-verbose mode
+                if (i+1) % 10 == 1 or (i+1) == video_selections_needed:
                     if selected_video_scores and enable_image_similarity and IMAGE_SIMILARITY_AVAILABLE:
-                        logger.success(f"✅ SEGMENT {i} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text: {selected_video_scores['text_similarity']:.3f}, image: {selected_video_scores['image_similarity']:.3f}, combined: {selected_video_scores['combined_similarity']:.3f})")
+                        logger.success(f"✅ VIDEO {i+1} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text: {selected_video_scores['text_similarity']:.3f}, image: {selected_video_scores['image_similarity']:.3f}, combined: {selected_video_scores['combined_similarity']:.3f})")
                     else:
-                        logger.success(f"✅ SEGMENT {i} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text similarity: {selected_video_scores['text_similarity']:.3f})")
+                        logger.success(f"✅ VIDEO {i+1} COMPLETED: Selected {os.path.basename(best_video['video_path'])} (text similarity: {selected_video_scores['text_similarity']:.3f})")
         else:
-            logger.error(f"❌ SEGMENT {i} FAILED: No suitable video found")
+            logger.error(f"❌ VIDEO SELECTION {i+1} FAILED: No suitable video found")
+            segments_without_videos += 1
+    
+    # Handle any unmatched segments (shouldn't happen with proper logic above)
+    if segments_without_videos > 0:
+        logger.warning(f"⚠️  {segments_without_videos} segments without videos - this indicates insufficient video pool")
     
     # Final diversity report
     logger.info("🎬" + "=" * 100)
-    logger.success(f"🎉 SEMANTIC SELECTION COMPLETED: {len(selected_videos)}/{len(segments)} segments matched")
+    logger.success(f"🎉 SEMANTIC SELECTION COMPLETED: {len(selected_videos)}/{video_selections_needed} video clips selected")
     
     # Log final usage statistics
     if used_videos:
@@ -501,12 +572,14 @@ def select_videos_for_script(
         
         # Check if diversity goals were met
         unique_videos_used = len(used_videos)
-        total_segments = len(segments)
-        diversity_ratio = unique_videos_used / total_segments if total_segments > 0 else 0
+        total_video_selections = video_selections_needed
+        diversity_ratio = unique_videos_used / total_video_selections if total_video_selections > 0 else 0
         
         logger.info(f"🎯 Diversity metrics:")
         logger.info(f"   📹 Unique videos used: {unique_videos_used}")
-        logger.info(f"   📝 Total segments: {total_segments}")
+        logger.info(f"   🎬 Total video selections: {total_video_selections}")
+        logger.info(f"   📝 Script segments: {len(segments)}")
+        logger.info(f"   🔁 Actual max reuse used: {actual_max_reuse}")
         logger.info(f"   📊 Diversity ratio: {diversity_ratio:.2f} ({diversity_ratio*100:.1f}%)")
         
         if diversity_ratio >= 0.8:
