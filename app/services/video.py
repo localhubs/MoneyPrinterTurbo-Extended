@@ -186,6 +186,7 @@ def combine_videos(
             script=script,
             video_metadata=video_metadata,
             audio_duration=audio_duration,
+            max_clip_duration=max_clip_duration,
             similarity_threshold=params.similarity_threshold if params else 0.5,
             diversity_threshold=params.diversity_threshold if params else 5,
             max_video_reuse=params.max_video_reuse if params else 2,
@@ -199,9 +200,11 @@ def combine_videos(
         # Process selected videos
         processed_clips = []
         video_duration = 0
+        max_reuse_limit = params.max_video_reuse if params and hasattr(params, 'max_video_reuse') and params.max_video_reuse is not None else None
         
         for i, selection in enumerate(selected_videos):
-            if video_duration > audio_duration:
+            # Don't break early when max_video_reuse=1 to utilize all selected videos
+            if video_duration > audio_duration and not (max_reuse_limit and max_reuse_limit == 1):
                 break
                 
             video_path = selection['video_path']
@@ -387,14 +390,60 @@ def combine_videos(
     
     # loop processed clips until the video duration matches or exceeds the audio duration.
     if video_duration < audio_duration:
-        logger.warning(f"video duration ({video_duration:.2f}s) is shorter than audio duration ({audio_duration:.2f}s), looping clips to match audio length.")
-        base_clips = processed_clips.copy()
-        for clip in itertools.cycle(base_clips):
-            if video_duration >= audio_duration:
-                break
-            processed_clips.append(clip)
-            video_duration += clip.duration
-        logger.info(f"video duration: {video_duration:.2f}s, audio duration: {audio_duration:.2f}s, looped {len(processed_clips)-len(base_clips)} clips")
+        # Check if we should respect max_video_reuse setting (already defined for semantic mode)
+        if 'max_reuse_limit' not in locals():
+            max_reuse_limit = params.max_video_reuse if params and hasattr(params, 'max_video_reuse') and params.max_video_reuse is not None else None
+        
+        if max_reuse_limit and max_reuse_limit == 1:
+            # User has set max reuse to 1, don't loop clips
+            logger.warning(f"video duration ({video_duration:.2f}s) is shorter than audio duration ({audio_duration:.2f}s), but max_video_reuse is set to 1 - NOT looping clips.")
+            logger.info(f"final video duration: {video_duration:.2f}s, audio duration: {audio_duration:.2f}s")
+        else:
+            # Original looping behavior for other cases
+            logger.warning(f"video duration ({video_duration:.2f}s) is shorter than audio duration ({audio_duration:.2f}s), looping clips to match audio length.")
+            
+            if max_reuse_limit:
+                # Track how many times each clip has been used for reuse limit
+                clip_usage = {}
+                base_clips = processed_clips.copy()
+                original_clip_count = len(base_clips)
+                
+                # Initialize usage counter
+                for i, clip in enumerate(base_clips):
+                    clip_usage[i] = 1  # Already used once
+                
+                clip_cycle = itertools.cycle(enumerate(base_clips))
+                clips_added = 0
+                
+                for clip_idx, clip in clip_cycle:
+                    if video_duration >= audio_duration:
+                        break
+                    
+                    # Check if this clip has reached the reuse limit
+                    if clip_usage[clip_idx] >= max_reuse_limit:
+                        # Skip clips that have reached the reuse limit
+                        continue
+                    
+                    processed_clips.append(clip)
+                    video_duration += clip.duration
+                    clip_usage[clip_idx] += 1
+                    clips_added += 1
+                    
+                    # Safety check: if all clips have reached the limit, break
+                    if all(usage >= max_reuse_limit for usage in clip_usage.values()):
+                        logger.warning(f"all clips have reached max reuse limit ({max_reuse_limit}), stopping at {video_duration:.2f}s")
+                        break
+                
+                logger.info(f"video duration: {video_duration:.2f}s, audio duration: {audio_duration:.2f}s, looped {clips_added} clips (respecting max_reuse_limit: {max_reuse_limit})")
+            else:
+                # Original unlimited looping behavior
+                base_clips = processed_clips.copy()
+                for clip in itertools.cycle(base_clips):
+                    if video_duration >= audio_duration:
+                        break
+                    processed_clips.append(clip)
+                    video_duration += clip.duration
+                logger.info(f"video duration: {video_duration:.2f}s, audio duration: {audio_duration:.2f}s, looped {len(processed_clips)-len(base_clips)} clips")
      
     # merge video clips using direct concatenation to avoid quality degradation
     logger.info("starting clip merging process")

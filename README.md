@@ -1,15 +1,9 @@
-<div align="center">
-<h1 align="center">MoneyPrinterTurbo - Enhanced Fork</h1>
 
-<p align="center">
-  <a href="https://github.com/harry0703/MoneyPrinterTurbo/stargazers"><img src="https://img.shields.io/github/stars/harry0703/MoneyPrinterTurbo.svg?style=for-the-badge" alt="Stargazers"></a>
-  <a href="https://github.com/harry0703/MoneyPrinterTurbo/issues"><img src="https://img.shields.io/github/issues/harry0703/MoneyPrinterTurbo.svg?style=for-the-badge" alt="Issues"></a>
-  <a href="https://github.com/harry0703/MoneyPrinterTurbo/network/members"><img src="https://img.shields.io/github/forks/harry0703/MoneyPrinterTurbo.svg?style=for-the-badge" alt="Forks"></a>
-  <a href="https://github.com/harry0703/MoneyPrinterTurbo/blob/main/LICENSE"><img src="https://img.shields.io/github/license/harry0703/MoneyPrinterTurbo.svg?style=for-the-badge" alt="License"></a>
-</p>
-</div>
+<h1 align="left">MoneyPrinterTurbo - Enhanced Fork</h1>
 
-## 🎬 Example Videos
+
+
+## 🎬 Example Output Videos
 
 See MoneyPrinterTurbo in action! These videos showcase the enhanced subtitle highlighting and semantic video selection features:
 
